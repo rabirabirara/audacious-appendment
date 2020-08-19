@@ -1,0 +1,15 @@
+: I tried to implement file-name detection without needing to specify .mp3.  Basically, if you had specified the path to an mp3 file but didn't write the mp3, the script could detect that for you and add it automatically.  It wouldn't work if you specified an mp3 but you only have an mp3.
+: Unfortunately, not only is this perplexing and complicated, it also doesn't work - imagine if you specify an m4a, but there is an mp3 with the same name.  You'll encounter the wrong behavior.
+: So specify the file types like proper human beings!  Thanks.
+///
+ if not file.endswith(".mp3"):
+            here = os.listdir()
+            # * Cool how strip() removes all from an input set of characters.
+            if (full := file.lstrip("./") + ".mp3") in here:
+                paths.append(os.path.abspath(full))
+            else:
+                print(full)
+                raise FileNotFoundError
+        else:
+           paths.append(os.path.abspath(file))
+///

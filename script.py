@@ -174,28 +174,32 @@ class AudacityInstance:
 
 def start_audacity():
     os.startfile("D:/Program Files (x86)/Audacity/audacity.exe")
-
-
-def wait_for_startup():
-    print("Waiting 3 seconds for Audacity to initialize:")
-    for i in range(1, 4):
-        time.sleep(1.0)
-        print("Waiting: {}".format(i))
-    print("Finished waiting.  Begin command execution.")
-
-
-def connect():
-    print("Let's wait 15 seconds for Audacity to start:")
+    print("Waiting 15 seconds for Audacity to start.")
     start = time.time()
     i = 0
     while not os.path.exists(WRITE_NAME) or not os.path.exists(READ_NAME):
         time.sleep(1.0)
-        i += 1
         diff = time.time() - start
-        print("Waiting for Audacity... {}".format(i))
+        i += 1
+        print(f"Waiting for Audacity... {i}")
         if diff > 15.0:
             print("Script aborted. Audacity took too long to open!")
             sys.exit()
+
+
+def wait_for_startup():
+    print("Waiting 5 seconds for Audacity to initialize:")
+    for i in range(1, 6):
+        time.sleep(1.0)
+        print(f"Waiting: {i}")
+    print("Finished waiting.  Begin command execution.")
+
+
+def connect():
+    if os.path.exists(WRITE_NAME) and os.path.exists(READ_NAME):
+        pass
+    else:
+        start_audacity()
 
     print("Successfully located Audacity instance.")
 
@@ -223,7 +227,7 @@ def to_end():
 
 
 def import2(filename):
-    return "Import2: Filename={}".format(filename)
+    return f"Import2: Filename={filename}"
 
 
 def main():
@@ -248,7 +252,6 @@ def main():
         lof_file.write(lof_string)
     # ! Don't forget to close the file handle, then delete it. Also, delete file.name.
 
-    start_audacity()
     instance = connect()
     wait_for_startup()
     instance.do(import2(lof_filepath))

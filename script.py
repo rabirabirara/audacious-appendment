@@ -62,14 +62,14 @@ into it; no need for work.  Typing in the filenames is the harder part.
 
 if sys.platform == "win32":
     print("Windows OS detected.")
-    WRITE_NAME = '\\\\.\\pipe\\ToSrvPipe'
-    READ_NAME = '\\\\.\\pipe\\FromSrvPipe'
-    EOL = '\r\n\0'
+    WRITE_NAME = "\\\\.\\pipe\\ToSrvPipe"
+    READ_NAME = "\\\\.\\pipe\\FromSrvPipe"
+    EOL = "\r\n\0"
 else:
     print("Unix-like OS detected.")
-    WRITE_NAME = '/tmp/audacity_script_pipe.to.' + str(os.getuid())
-    READ_NAME = '/tmp/audacity_script_pipe.from.' + str(os.getuid())
-    EOL = '\n'
+    WRITE_NAME = "/tmp/audacity_script_pipe.to." + str(os.getuid())
+    READ_NAME = "/tmp/audacity_script_pipe.from." + str(os.getuid())
+    EOL = "\n"
 
 
 class AudacityInstance:
@@ -115,7 +115,7 @@ class AudacityInstance:
             sys.exit("Write pipe could not be opened.")
 
     def _write_pipe_open(self):
-        self._write_pipe = open(WRITE_NAME, 'w')
+        self._write_pipe = open(WRITE_NAME, "w")
 
     def _read_thread_start(self):
         read_thread = threading.Thread(target=self._reader)
@@ -124,9 +124,9 @@ class AudacityInstance:
 
     def _reader(self):
         """Read FIFO in worker thread."""
-        read_pipe = open(READ_NAME, 'r')
+        read_pipe = open(READ_NAME, "r")
         message = ""
-        pipe_ok = true
+        pipe_ok = True
         while pipe_ok:
             line = read_pipe.readline()
             while pipe_ok and line != "\n":

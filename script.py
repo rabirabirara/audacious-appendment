@@ -5,6 +5,7 @@ import os, sys
 import argparse
 import time
 import threading
+from enum import Enum
 
 """
 Sorting of names works with numbers, so Python can sort the filenames passed
@@ -99,7 +100,6 @@ class AudacityInstance:
     def writer_thread(self):
         """Start a thread that writes commands."""
         write_thread = threading.Thread(target=self.writer_handle)
-        write_thread.daemon = True
         write_thread.start()
 
         # The connection should be made nearly right away (allow some time).
@@ -110,23 +110,22 @@ class AudacityInstance:
 
     def writer_handle(self):
         """Opens handle for writing to Audacity."""
-        self.write_handle = open(WRITE_NAME, 'w')
+        self.write_handle = open(WRITE_NAME, "w")
 
     def reader_thread(self):
         """Start a thread that reads responses."""
         read_thread = threading.Thread(target=self.reader_handle)
-        read_thread.daemon = True
         read_thread.start()
 
     def reader_handle(self):
         """Opens handle for reading from Audacity.
         Reads responses line by line."""
-        read_handle = open(READ_NAME, 'r')
+        read_handle = open(READ_NAME, "r")
         message = ""
         handle_alive = True
         while handle_alive:
             line = read_handle.readline()
-            while handle_alive and line != '\n':
+            while handle_alive and line != "\n":
                 message += line
                 line = read_handle.readline()
                 if line == "":
@@ -157,19 +156,21 @@ class AudacityInstance:
 
     def read(self):
         """Receive a response from Audacity."""
-        # Remember, reader_handle is responsible for setting self.reply 
+        # Remember, reader_handle is responsible for setting self.reply
         # and setting the flag for them to be ready.
         # write() is responsible for clearing the last reply.
-        if not AudacityInstance.reply_ready.isSet():
-            return ""
+        while not AudacityInstance.reply_ready.isSet():
+            # Block thread until reply is received
+            time.sleep(0.1)
         return self.reply
 
-    def do(self, command):
+    # TODO: Make all this async, so we can just await the damn thing.
+    def do_command(self, command):
         """Perform a single command and print the response."""
         self.write(command)
-        # Allow time for a reply
-        time.sleep(0.1)
-        self.read()
+        reply = self.read()
+        print(reply)
+        time.sleep(0.5)
 
 
 def start_audacity():
@@ -187,9 +188,9 @@ def start_audacity():
             sys.exit()
 
 
-def wait_for_startup():
-    print("Waiting 5 seconds for Audacity to initialize:")
-    for i in range(1, 6):
+def initialize_audacity():
+    print("Waiting 3 seconds for Audacity to initialize:")
+    for i in range(1, 4):
         time.sleep(1.0)
         print(f"Waiting: {i}")
     print("Finished waiting.  Begin command execution.")
@@ -226,18 +227,100 @@ def to_end():
     return "CursProjectEnd"
 
 
+# Possibility: play 2 seconds, stop, select lef; etc.
+def one_sec_back():
+    return "CursorShortJumpLeft"
+
+def one_sec_forward():
+    return "CursorShortJumpLeft"
+
+def start_secs(secs):
+    return f"SelectTime: Start=0 End={secs} RelativeTo=ProjectStart"
+
+def end_secs(secs):
+    return f"SelectTime: Start=0 End={secs} RelativeTo=ProjectEnd"
+
+def enable_cursor():
+    return "SelAllTracks"
+
+# Needs selection to work.
+def start_silence():
+    return "NyquistPrompt: Command=\"(defun insertstart (sig) (sum (s-rest 2) (at 1 (cue sig)))) (multichan-expand #'insertstart s)\""
+
+
+# Needs selection to work.
+def end_silence():
+    # command = "(defun insertend (sig) (sum (s-rest 2) (at 0 (cue sig)))) (multichan-expand #'insertend s)"
+    return "NyquistPrompt: Command=\"(defun insertstart (sig) (sum (s-rest 2) (at 0 ( cue sig)))) (multichan-expand #'insertstart s)\""
+
+
 def import2(filename):
     return f"Import2: Filename={filename}"
 
 
+def select_all():
+    return "SelectAll"
+
+
+def select_none():
+    return "SelectNone"
+
+
+# TruncateSilence Independently is actually broken and won't truncate.
+def truncate():
+    return "TruncateSilence: Threshold=-59 Minimum=0.001 Truncate=0 Independent=True"
+
+
+def align_ends():
+    return "Align_EndToEnd"
+
+
+def mix_render():
+    return "MixAndRender"
+
+
+def normalize():
+    """Amplifies audio to a peak of 0.0db.  Amplify is not available.
+    Normalize is a substitute command that achieves the same effect."""
+    # You can invert an amplified and normalized clip and hear silence.
+    return "Normalize: PeakLevel=0 RemoveDcOffset=False"
+
+
+def join():
+    return "Join"
+
+class Silence(Enum):
+    none = "none"
+    independent = "ind"
+    combined = "comb"
+    
+    def __str__(self):
+        return self.value
+
+# TODO: Do valid checking on Silence + int (secs to add).
+# def valid_silence(choice):
+#     try:
+#         choice.startswith(Silence, int)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("FILES", nargs="+", type=str)
-    parser.add_argument("-o", default="audio-join-script-result")
+    parser.add_argument("-o", "--output", default="audio-join-script-result", help="Determines the output file's name.")
+    parser.add_argument("-t", "--truncate", default=False, action='store_true', help="Choose to truncate silence or not.  Truncating is useful for joining classical movements that segue attaca into one another.")
+    parser.add_argument("-s", "--silence", type=Silence, choices=list(Silence), help="Choose to add no silence, to add silence to all tracks individually, or to add silence to the combined final track.")
+    # ! ArgParse doesn't allow for mutually inclusive arguments.
+    # ! Python's stdlib is so crap lol.  Even Rust's clap can do this,
+    # ! and it's much newer (when we consider optparse too).
+    # This means I can't add a count argument that is required when I
+    # have an add silence argument. If I could, I could make the Silence enum
+    # more like an Option, and have default = None or specified = one of the 
+    # two types in the enum.  Then I could require a number of secs to add.
+    # TODO: Add conditional arguments.
 
     args = parser.parse_args()
     files = args.FILES
     output_name = args.o
+    do_truncate = args.t
     paths = []
 
     # We make the user responsible for specifying file extensions, because of
@@ -253,8 +336,50 @@ def main():
     # ! Don't forget to close the file handle, then delete it. Also, delete file.name.
 
     instance = connect()
-    wait_for_startup()
-    instance.do(import2(lof_filepath))
+    initialize_audacity()
+
+    def do(command):
+        instance.do_command(command)
+
+    def align_all():
+        do(select_all())
+        do(align_ends())
+
+    def truncate_all():
+        do(select_all())
+        do(truncate())
+
+    def mix_render_all():
+        do(select_all())
+        do(mix_render())
+
+    def normalize_all():
+        do(select_all())
+        do(normalize())
+
+    
+    do(import2(lof_filepath))
+    do(enable_cursor())
+    
+    align_all() 
+    if do_truncate:
+        truncate_all() 
+    align_all()
+    mix_render_all()
+    normalize_all()
+
+    # ! Why does generating any nosie not allow you to specify a duration?
+    # ! Why does generating noise generate over the whole file?
+    # * These questions are answered on the forums.  In short,
+    # * there is no actual macro for inserting silence.
+    do(select_none())
+    do(enable_cursor())
+    do(start_secs(2))
+    do(start_silence())
+    do(end_secs(2))
+    do(end_silence())
+    do(select_all())
+    do(join())
 
 
 if __name__ == "__main__":

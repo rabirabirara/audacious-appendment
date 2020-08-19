@@ -1,5 +1,6 @@
 #! python3
 
+import errno
 import os, sys
 import argparse
 import time
@@ -73,55 +74,102 @@ else:
 
 class AudacityInstance:
 
-    reader_pipe_broken = threading.event()
-    reply_ready = threading.event()
+    reader_pipe_broken = threading.Event()
+    reply_ready = threading.Event()
 
     # In Python every object has a __dict__ attribute, which contains their symbol table.
     # It's because everything in Python is an object.
 
     def __init__(self):
-        self._write_pipe = None
-        self._reply = ''
-        self._write_thread_start()
-        self._read_thread_start()
+        # Define shared mutable state among read and write threads.
+        self.write_handle = None
+        self.reply = ""
+        if not self.write_handle:
+            self.writer_thread()
+        self.reader_thread()
+        # self.write_handle = write_handle
+        # self.read_handle = read_handle
+        # self.eol = eol
+        # self._write_pipe = None
+        # self._reply = ""
+        # if not self._write_pipe:
+        #     self._write_thread_start()
+        # self._read_thread_start()
 
-    def _write_thread_start(self):
-        # We open the pipe in a new thread, so that if Audacity isn't running, the program does not freeze/shut down.
-        # To use Thread() and create a thread object, we pass a callable object to the constructor.
-        # write_thread is now a thread_object.
-        write_thread = threading.Thread(target=self._write_pipe_open)
-        # Let's make it a daemon thread.  If there are no daemon threads left, the program doesn't necessarily exit.
-        # If all the non-daemon threads are gone, however, the program will exit.
+    def writer_thread(self):
+        """Start a thread that writes commands."""
+        write_thread = threading.Thread(target=self.writer_handle)
         write_thread.daemon = True
-        # Now we call the function we passed to the thread.
         write_thread.start()
 
-    def _write_pipe_open(self):
-        self._write_pipe = open(WRITE_NAME)
+        # The connection should be made nearly right away (allow some time).
+        # If not made, then exit.
+        time.sleep(0.1)
+        if not self.write_handle:
+            sys.exit("The write handle could not be opened!")
 
-    def send_command(self, command):
-        """Send a single command to the file handle."""
-        print("Send >>>")
-        print(command)
-        self.write_pipe.write(command + self.eol)
-        self.write_pipe.flush()
+    def writer_handle(self):
+        """Opens handle for writing to Audacity."""
+        self.write_handle = open(WRITE_NAME, 'w')
 
-    def receive_response(self):
+    def reader_thread(self):
+        """Start a thread that reads responses."""
+        read_thread = threading.Thread(target=self.reader_handle)
+        read_thread.daemon = True
+        read_thread.start()
+
+    def reader_handle(self):
+        """Opens handle for reading from Audacity.
+        Reads responses line by line."""
+        read_handle = open(READ_NAME, 'r')
+        message = ""
+        handle_alive = True
+        while handle_alive:
+            line = read_handle.readline()
+            while handle_alive and line != '\n':
+                message += line
+                line = read_handle.readline()
+                if line == "":
+                    AudacityInstance.reader_pipe_broken.set()
+                    handle_alive = False
+            self.reply = message
+            AudacityInstance.reply_ready.set()
+            # We reset the message after each read completes.
+            message = ""
+        read_handle.close()
+
+    def write(self, command):
+        """Send a single command to Audacity."""
+        print("Sending command:", command)
+        self.write_handle.write(command + EOL)
+        # Check that the read handle is still alive.
+        if AudacityInstance.reader_pipe_broken.isSet():
+            sys.exit("The handle for reading Audacity's responses broke down.")
+        try:
+            self.write_handle.flush()
+            self.reply = ""
+            AudacityInstance.reply_ready.clear()
+        except IOError as err:
+            if err.errno == errno.EPIPE:
+                sys.exit("The handle for writing commands to Audacity broke down.")
+            else:
+                raise
+
+    def read(self):
         """Receive a response from Audacity."""
-        print("Receive <<<")
-        response = ""
-        line = ""
+        # Remember, reader_handle is responsible for setting self.reply 
+        # and setting the flag for them to be ready.
+        # write() is responsible for clearing the last reply.
+        if not AudacityInstance.reply_ready.isSet():
+            return ""
+        return self.reply
 
-        # Response terminates on \n alone.
-        while line != "\n":
-            response += line
-            line = self.read_pipe.readline()
-        print(response)
-
-    def do_command(self, command):
+    def do(self, command):
         """Perform a single command and print the response."""
-        self.send_command(command)
-        self.receive_response()
+        self.write(command)
+        # Allow time for a reply
+        time.sleep(0.1)
+        self.read()
 
 
 def start_audacity():
@@ -129,31 +177,29 @@ def start_audacity():
 
 
 def wait_for_startup():
-    print("Waiting 5 seconds for Audacity to initialize:")
-    for i in range(0, 5):
+    print("Waiting 3 seconds for Audacity to initialize:")
+    for i in range(1, 4):
         time.sleep(1.0)
         print("Waiting: {}".format(i))
     print("Finished waiting.  Begin command execution.")
 
 
 def connect():
-
-    print("Let's wait 30 seconds for Audacity to start:")
+    print("Let's wait 15 seconds for Audacity to start:")
     start = time.time()
+    i = 0
     while not os.path.exists(WRITE_NAME) or not os.path.exists(READ_NAME):
         time.sleep(1.0)
-        end = time.time()
-        diff = end - start
-        print("Waiting for Audacity... {} seconds left".format(round(30.0 - diff)))
-        if diff > 30.0:
+        i += 1
+        diff = time.time() - start
+        print("Waiting for Audacity... {}".format(i))
+        if diff > 15.0:
             print("Script aborted. Audacity took too long to open!")
             sys.exit()
 
     print("Successfully located Audacity instance.")
-    TOFILE = open(WRITE_NAME, "w")
-    FROMFILE = open(READ_NAME, "rt")
 
-    instance = AudacityInstance(WRITE_NAME, READ_NAME, EOL, TOFILE, FROMFILE)
+    instance = AudacityInstance()
     return instance
 
 
@@ -194,6 +240,7 @@ def main():
     # the possibility of two file extensions on a file.
     for file in files:
         paths.append(os.path.abspath(file))
+        print(os.path.abspath(file))
 
     lof_string = create_lof_string(paths)
     with create_lof_file() as lof_file:
@@ -204,7 +251,7 @@ def main():
     start_audacity()
     instance = connect()
     wait_for_startup()
-    instance.do_command(import2(lof_filepath))
+    instance.do(import2(lof_filepath))
 
 
 if __name__ == "__main__":

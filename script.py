@@ -204,6 +204,7 @@ def connect():
 
     print("Successfully located Audacity instance.")
 
+    time.sleep(0.5)
     instance = AudacityInstance()
     return instance
 
@@ -289,6 +290,12 @@ def normalize():
 def join():
     return "Join"
 
+# ! Export2 is problematic.  It pulls from the last used preferences 
+# ! for options like bitrate, quality, etc.
+# ! Make sure these are correctly set manually.
+def export2(filename):
+    return f"Export2: Filename={filename}"
+
 class Silence(Enum):
     none = "none"
     independent = "ind"
@@ -302,10 +309,18 @@ class Silence(Enum):
 #     try:
 #         choice.startswith(Silence, int)
 
+def valid_filename(filename):
+    name, extension = os.path.splitext(filename)
+    if extension == '':
+        raise argparse.ArgumentTypeError("Output must include an extension!")
+    else:
+        return filename
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("FILES", nargs="+", type=str)
-    parser.add_argument("-o", "--output", default="audio-join-script-result", help="Determines the output file's name.")
+    parser.add_argument("FILES", nargs="+", type=valid_filename)
+    parser.add_argument("-o", "--output", default="audio-join-script-result", help="Determines the output file's name.", metavar="FILENAME", type=valid_filename)
     parser.add_argument("-t", "--truncate", default=False, action='store_true', help="Choose to truncate silence or not.  Truncating is useful for joining classical movements that segue attaca into one another.")
     parser.add_argument("-s", "--silence", type=Silence, choices=list(Silence), help="Choose to add no silence, to add silence to all tracks individually, or to add silence to the combined final track.")
     # ! ArgParse doesn't allow for mutually inclusive arguments.
@@ -319,8 +334,9 @@ def main():
 
     args = parser.parse_args()
     files = args.FILES
-    output_name = args.o
-    do_truncate = args.t
+    output_name = args.output
+    do_truncate = args.truncate
+    some_silence = args.silence
     paths = []
 
     # We make the user responsible for specifying file extensions, because of
@@ -337,6 +353,11 @@ def main():
 
     instance = connect()
     initialize_audacity()
+
+    # ! Audacity can only handle a maximum of 16 tracks.
+    # ! But there are plenty of situations in which we want to mix more than that!
+    # ! We need a way to mix tracks bits at a time. Typically,
+    # ! this will come up before the global "___all()" operations.
 
     def do(command):
         instance.do_command(command)
@@ -357,6 +378,8 @@ def main():
         do(select_all())
         do(normalize())
 
+    # def silence_independently():
+       # do() 
     
     do(import2(lof_filepath))
     do(enable_cursor())
@@ -364,6 +387,8 @@ def main():
     align_all() 
     if do_truncate:
         truncate_all() 
+    # if silence_type.value == "ind":
+    #     silence_independently()
     align_all()
     mix_render_all()
     normalize_all()
@@ -380,6 +405,8 @@ def main():
     do(end_silence())
     do(select_all())
     do(join())
+
+    do(export2(output_name)) 
 
 
 if __name__ == "__main__":

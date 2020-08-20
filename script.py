@@ -61,6 +61,9 @@ into it; no need for work.  Typing in the filenames is the harder part.
 # Make a cleaning script afterwards, to delete .lof files
 
 
+# For my use.
+MUSICFOLDER = "D:\Wyvern\Music"
+
 if sys.platform == "win32":
     print("Windows OS detected.")
     WRITE_NAME = "\\\\.\\pipe\\ToSrvPipe"
@@ -188,6 +191,12 @@ def start_audacity():
             sys.exit()
 
 
+def end_audacity():
+    print("Script successful. Closing Audacity...")
+    time.sleep(2.0)
+    os.system("taskkill /f /im audacity.exe /t")
+
+
 def initialize_audacity():
     print("Waiting 3 seconds for Audacity to initialize:")
     for i in range(1, 4):
@@ -217,7 +226,11 @@ def create_lof_string(filepath_list):
 
 
 def create_lof_file():
-    return open("test.lof", "w+")
+    return open("temp.lof", "w+")
+
+
+def remove_lof_file(path):
+    os.remove(path)
 
 
 def to_start():
@@ -232,27 +245,32 @@ def to_end():
 def one_sec_back():
     return "CursorShortJumpLeft"
 
+
 def one_sec_forward():
     return "CursorShortJumpLeft"
+
 
 def start_secs(secs):
     return f"SelectTime: Start=0 End={secs} RelativeTo=ProjectStart"
 
+
 def end_secs(secs):
     return f"SelectTime: Start=0 End={secs} RelativeTo=ProjectEnd"
+
 
 def enable_cursor():
     return "SelAllTracks"
 
+
 # Needs selection to work.
 def start_silence():
-    return "NyquistPrompt: Command=\"(defun insertstart (sig) (sum (s-rest 2) (at 1 (cue sig)))) (multichan-expand #'insertstart s)\""
+    return 'NyquistPrompt: Command="(defun insertstart (sig) (sum (s-rest 2) (at 1 (cue sig)))) (multichan-expand #\'insertstart s)"'
 
 
 # Needs selection to work.
 def end_silence():
     # command = "(defun insertend (sig) (sum (s-rest 2) (at 0 (cue sig)))) (multichan-expand #'insertend s)"
-    return "NyquistPrompt: Command=\"(defun insertstart (sig) (sum (s-rest 2) (at 0 ( cue sig)))) (multichan-expand #'insertstart s)\""
+    return 'NyquistPrompt: Command="(defun insertstart (sig) (sum (s-rest 2) (at 0 ( cue sig)))) (multichan-expand #\'insertstart s)"'
 
 
 def import2(filename):
@@ -290,29 +308,33 @@ def normalize():
 def join():
     return "Join"
 
-# ! Export2 is problematic.  It pulls from the last used preferences 
+
+# ! Export2 is problematic.  It pulls from the last used preferences
 # ! for options like bitrate, quality, etc.
 # ! Make sure these are correctly set manually.
 def export2(filename):
-    return f"Export2: Filename={filename}"
+    return f"Export2: Filename={filename} NumChannels=2"
+
 
 class Silence(Enum):
     none = "none"
     independent = "ind"
     combined = "comb"
-    
+
     def __str__(self):
         return self.value
+
 
 # TODO: Do valid checking on Silence + int (secs to add).
 # def valid_silence(choice):
 #     try:
 #         choice.startswith(Silence, int)
 
+
 def valid_filename(filename):
     name, extension = os.path.splitext(filename)
-    if extension == '':
-        raise argparse.ArgumentTypeError("Output must include an extension!")
+    if extension == "":
+        raise argparse.ArgumentTypeError("File arguments must include an extension!")
     else:
         return filename
 
@@ -320,27 +342,57 @@ def valid_filename(filename):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("FILES", nargs="+", type=valid_filename)
-    parser.add_argument("-o", "--output", default="audio-join-script-result", help="Determines the output file's name.", metavar="FILENAME", type=valid_filename)
-    parser.add_argument("-t", "--truncate", default=False, action='store_true', help="Choose to truncate silence or not.  Truncating is useful for joining classical movements that segue attaca into one another.")
-    parser.add_argument("-s", "--silence", type=Silence, choices=list(Silence), help="Choose to add no silence, to add silence to all tracks individually, or to add silence to the combined final track.")
+    parser.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        help="Determines the output file's name.",
+        metavar="FILENAME.ext",
+        type=valid_filename,
+    )
+    parser.add_argument(
+        "-t",
+        "--truncate",
+        default=False,
+        action="store_true",
+        help="Choose to truncate silence or not.  Truncating is useful for joining classical movements that segue attaca into one another.",
+    )
+    parser.add_argument(
+        "-s",
+        "--silence",
+        type=Silence,
+        choices=list(Silence),
+        help="Choose either to add no silence, to add silence to all tracks individually, or to add silence to the combined final track.",
+    )
+    # TODO: Validate this as a path to go before a basename. Can do so in main, given output filename as tail and 
+    # argument as head; put together and check if valid abspath.
+    parser.add_argument(
+        "-p",
+        "--path",
+        help="Specify a path for your file either here or in output.",
+        type=str,
+    )
     # ! ArgParse doesn't allow for mutually inclusive arguments.
     # ! Python's stdlib is so crap lol.  Even Rust's clap can do this,
     # ! and it's much newer (when we consider optparse too).
     # This means I can't add a count argument that is required when I
     # have an add silence argument. If I could, I could make the Silence enum
-    # more like an Option, and have default = None or specified = one of the 
+    # more like an Option, and have default = None or specified = one of the
     # two types in the enum.  Then I could require a number of secs to add.
-    # TODO: Add conditional arguments.
+    # TODO: Add conditional arguments, to work with silence and adding a silence secs count.
 
     args = parser.parse_args()
     files = args.FILES
     output_name = args.output
     do_truncate = args.truncate
     some_silence = args.silence
-    paths = []
+    path_specified = args.path
+    # TODO: Reorganize main, and then pass args object to them. Or, pass just needed args.
+    # Parts: import, export, increment, combined, etc.
 
     # We make the user responsible for specifying file extensions, because of
     # the possibility of two file extensions on a file.
+    paths = []
     for file in files:
         paths.append(os.path.abspath(file))
         print(os.path.abspath(file))
@@ -358,6 +410,8 @@ def main():
     # ! But there are plenty of situations in which we want to mix more than that!
     # ! We need a way to mix tracks bits at a time. Typically,
     # ! this will come up before the global "___all()" operations.
+    # TODO: figure out mixing two at a time, building incrementally.
+    # TODO: Reorganize the main so that incremental operations are separate from global operations.
 
     def do(command):
         instance.do_command(command)
@@ -379,14 +433,14 @@ def main():
         do(normalize())
 
     # def silence_independently():
-       # do() 
-    
+    # do()
+
     do(import2(lof_filepath))
     do(enable_cursor())
-    
-    align_all() 
+
+    align_all()
     if do_truncate:
-        truncate_all() 
+        truncate_all()
     # if silence_type.value == "ind":
     #     silence_independently()
     align_all()
@@ -406,7 +460,21 @@ def main():
     do(select_all())
     do(join())
 
-    do(export2(output_name)) 
+    if os.path.isabs(output_name):
+        output = output_name
+        print(f"Saving to path: {output}")
+    else:
+        # If the path is not valid, do away with it.
+        name_ext = os.path.basename(output_name)
+        output = MUSICFOLDER + name_ext
+        print(f"Saving to default path: {output}")
+
+    # ! The resulting quality of the output file is lower than the originals.  Egads!
+    # TODO: Investigate the cause of lower quality output.
+    do(export2(output))
+
+    remove_lof_file(lof_filepath)
+    end_audacity()
 
 
 if __name__ == "__main__":

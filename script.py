@@ -62,7 +62,7 @@ into it; no need for work.  Typing in the filenames is the harder part.
 
 
 # For my use.
-MUSICFOLDER = "D:\Wyvern\Music"
+MUSICFOLDER = "D:\\Wyvern\\Music\\"
 
 if sys.platform == "win32":
     print("Windows OS detected.")
@@ -269,7 +269,6 @@ def start_silence():
 
 # Needs selection to work.
 def end_silence():
-    # command = "(defun insertend (sig) (sum (s-rest 2) (at 0 (cue sig)))) (multichan-expand #'insertend s)"
     return 'NyquistPrompt: Command="(defun insertstart (sig) (sum (s-rest 2) (at 0 ( cue sig)))) (multichan-expand #\'insertstart s)"'
 
 

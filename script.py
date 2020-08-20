@@ -2,6 +2,7 @@
 
 import errno
 import os, sys
+from pathlib import Path, WindowsPath
 import argparse
 import time
 import threading
@@ -313,9 +314,25 @@ class Silence(Enum):
 
 
 # TODO: Do valid checking on Silence + int (secs to add).
-# def valid_silence(choice):
-#     try:
-#         choice.startswith(Silence, int)
+def valid_silence(choice):
+    # A valid choice should be Silence int.
+    lst = choice.split()
+    if lst.len() != 2:
+        raise argparse.ArgumentTypeError("Must pass in two arguments to --silence!")
+    else:
+        if isinstance(lst[0], Silence):
+            try:
+                count = int(lst[1])
+                return (lst[0].value, count)
+            except ValueError:
+                print(
+                    "Please give a decimal integer for the number of seconds of silence you want to add!"
+                )
+                # TODO* Of course, the next step is to somehow enable varied silence adding for each track... oh boy.
+        else:
+            raise argparse.ArgumentTypeError(
+                "The first argument to --silence must be one of the options specified.  See --help for details."
+            )
 
 
 def valid_filename(filename):
@@ -344,11 +361,12 @@ def main():
         action="store_true",
         help="Choose to truncate silence or not.  Truncating is useful for joining classical movements that segue attaca into one another.",
     )
+    # ? Unfortunately, there's no easy way to use choices=list(Silence) and nargs=2 at the same time, with the second
+    # ? having a range of i16. Argparse just isn't that smart.
     parser.add_argument(
         "-s",
         "--silence",
-        type=Silence,
-        choices=list(Silence),
+        type=valid_silence,
         help="Choose either to add no silence, to add silence to all tracks individually, or to add silence to the combined final track.",
     )
     # TODO: Validate this as a path to go before a basename. Can do so in main, given output filename as tail and
@@ -368,6 +386,7 @@ def main():
     # two types in the enum.  Then I could require a number of secs to add.
     # TODO: Add conditional arguments, to work with silence and adding a silence secs count.
 
+    # TODO: Add ability to import .lof.
     args = parser.parse_args()
     files = args.FILES
     output_name = args.output
@@ -376,18 +395,31 @@ def main():
     path_specified = args.path
     # TODO: Reorganize main, and then pass args object to them. Or, pass just needed args.
     # Parts: import, export, increment, combined, etc.
+    # * Here's the plan for implementing incremental read.  You have to write a .lof with over 15 tracks, or have to pass the option "--incremental".
+    # * If incremental, commence incremenetal code. If not, commence normal code.  If .lof has over 15 tracks (or FILES has length greater than 15) then use incremental logic.
 
     # We make the user responsible for specifying file extensions, because of
     # the possibility of two file extensions on a file.
     paths = []
-    for file in files:
-        paths.append(os.path.abspath(file))
-        print(os.path.abspath(file))
+    lof_specified = False
+    if len(files) > 1:
+        for f in files:
+            file = WindowsPath(f)
+            abs_path = file.resolve(strict=True)
+            paths.append(abs_path)
+            print(abs_path)
+        lof_string = create_lof_string(paths)
+        with create_lof_file() as lof_file:
+            lof_filepath = WindowsPath(lof_file.name).resolve(strict=True)
+            lof_file.write(lof_string)
+    elif files[0].endswith(".lof"):
+        lof_specified = True
+        # ? What freaking exceptions will this throw???
+        given_lof = WindowsPath(files[0])
+        lof_filepath = given_lof.resolve(strict=True)
+    else:
+        raise argparse.ArgumentError
 
-    lof_string = create_lof_string(paths)
-    with create_lof_file() as lof_file:
-        lof_filepath = os.path.abspath(lof_file.name)
-        lof_file.write(lof_string)
     # ! Don't forget to close the file handle, then delete it. Also, delete file.name.
 
     instance = connect()
@@ -460,7 +492,8 @@ def main():
     # TODO: Investigate the cause of lower quality output.
     do(export2(output))
 
-    remove_lof_file(lof_filepath)
+    if not lof_specified:
+        remove_lof_file(lof_filepath)
     end_audacity()
 
 

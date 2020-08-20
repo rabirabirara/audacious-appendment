@@ -81,24 +81,13 @@ class AudacityInstance:
     reader_pipe_broken = threading.Event()
     reply_ready = threading.Event()
 
-    # In Python every object has a __dict__ attribute, which contains their symbol table.
-    # It's because everything in Python is an object.
-
     def __init__(self):
-        # Define shared mutable state among read and write threads.
         self.write_handle = None
         self.reply = ""
+        # For good measure.  Not sure why this code is here, though - there's only one instance anyway.
         if not self.write_handle:
             self.writer_thread()
         self.reader_thread()
-        # self.write_handle = write_handle
-        # self.read_handle = read_handle
-        # self.eol = eol
-        # self._write_pipe = None
-        # self._reply = ""
-        # if not self._write_pipe:
-        #     self._write_thread_start()
-        # self._read_thread_start()
 
     def writer_thread(self):
         """Start a thread that writes commands."""

@@ -52,3 +52,9 @@ Actually, to make this add silence to the end of a selection instead, it's as ea
 Overall, you can imagine this command to say something like: define a function "insertstart" that takes a signal (a sound) and gives the sum of some silence and the signal but shifted over by its duration.  Then call the function on both channels.  Gosh, Lisp is cool and ugly at the same time.  I much prefer ML; but I respect LiSP all the same.
 
 Hopefully, if anyone ever has the problem of inserting silence at the beginning and end of a file, they can look at my script and figure it out themselves.
+
+## Credits
+
+Thanks to Steve Daulton for his Nyquist plugins, which I pretty much copied here.
+
+Thanks to the Audacity team for their helpful pipe_test.py and pipeclient.py, the latter of which I more or less used to not only test my script but scaffold it.  I plan to make this script single-threaded (use no actual threading at all) later on, as it is a blocking script anyway; that will release any old code from the pipeclient.py the team wrote.

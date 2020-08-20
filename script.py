@@ -104,6 +104,10 @@ class AudacityInstance:
         """Start a thread that writes commands."""
         write_thread = threading.Thread(target=self.writer_handle)
         write_thread.start()
+        # We let some time for the connection to be made (from the thread above).
+        time.sleep(0.2)
+        if not self._write_pipe:
+            sys.exit("Write pipe could not be opened.")
 
         # The connection should be made nearly right away (allow some time).
         # If not made, then exit.
@@ -485,4 +489,3 @@ if __name__ == "__main__":
         print(
             "One of your input files was not found! It may have been an erroneous filename, or an improper path."
         )
-

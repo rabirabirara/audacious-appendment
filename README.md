@@ -23,7 +23,7 @@ The script is very basic at present.  It should:
 
 There is much to be added.  I want to add a sort option for files that are named in a sortable way (classical music).  I want greater options for adding silence to the start/end of tracks.  I want to make the script nicer.  I want to add incremental track addition, so that I can merge more 
 than a dozen tracks together (Audacity's track limit is 16; if I want to combine several tracks a la some Vikingur Olafsson album, then I need to implement this).  I need to add Linux/Mac support,
-for no reason but robustness.
+for no reason but robustness.  Also, the script doesn't work if this instance of Audacity's pipes had already been used earlier.
 
 Audacity's capabilities are also limited.  If we could specify durations on commands, it would be great and extremely convenient.  If we could control export options, it would be extremely
 great.  If Python could have a better argparse module, that would be excellent.

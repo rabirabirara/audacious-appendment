@@ -104,10 +104,6 @@ class AudacityInstance:
         """Start a thread that writes commands."""
         write_thread = threading.Thread(target=self.writer_handle)
         write_thread.start()
-        # We let some time for the connection to be made (from the thread above).
-        time.sleep(0.2)
-        if not self._write_pipe:
-            sys.exit("Write pipe could not be opened.")
 
         # The connection should be made nearly right away (allow some time).
         # If not made, then exit.
@@ -195,6 +191,7 @@ def start_audacity():
             sys.exit()
 
 
+# TODO: Add unix compatibility.
 def end_audacity():
     print("Script successful. Closing Audacity...")
     time.sleep(2.0)
@@ -216,8 +213,7 @@ def connect():
         start_audacity()
 
     print("Successfully located Audacity instance.")
-
-    time.sleep(0.5)
+    time.sleep(1.0)
     instance = AudacityInstance()
     return instance
 
@@ -288,7 +284,6 @@ def select_none():
     return "SelectNone"
 
 
-# TruncateSilence Independently is actually broken and won't truncate.
 def truncate():
     return "TruncateSilence: Threshold=-59 Minimum=0.001 Truncate=0 Independent=True"
 
@@ -335,7 +330,7 @@ class Silence(Enum):
 
 
 def valid_filename(filename):
-    name, extension = os.path.splitext(filename)
+    _, extension = os.path.splitext(filename)
     if extension == "":
         raise argparse.ArgumentTypeError("File arguments must include an extension!")
     else:

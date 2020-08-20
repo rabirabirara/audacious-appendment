@@ -13,3 +13,4 @@
         else:
            paths.append(os.path.abspath(file))
 ///
+: I ended up using os.path functions instead.

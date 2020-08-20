@@ -362,7 +362,7 @@ def main():
         choices=list(Silence),
         help="Choose either to add no silence, to add silence to all tracks individually, or to add silence to the combined final track.",
     )
-    # TODO: Validate this as a path to go before a basename. Can do so in main, given output filename as tail and 
+    # TODO: Validate this as a path to go before a basename. Can do so in main, given output filename as tail and
     # argument as head; put together and check if valid abspath.
     parser.add_argument(
         "-p",

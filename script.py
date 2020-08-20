@@ -2,7 +2,7 @@
 
 import errno
 import os, sys
-from pathlib import Path, WindowsPath
+from pathlib import Path
 import argparse
 import time
 import threading
@@ -66,14 +66,14 @@ into it; no need for work.  Typing in the filenames is the harder part.
 MUSICFOLDER = "D:\\Wyvern\\Music\\"
 
 if sys.platform == "win32":
-    print("Windows OS detected.")
-    WRITE_NAME = "\\\\.\\pipe\\ToSrvPipe"
-    READ_NAME = "\\\\.\\pipe\\FromSrvPipe"
+    # print("Windows OS detected.")
+    WRITE_PATH = Path("\\\\.\\pipe\\ToSrvPipe")
+    READ_PATH = Path("\\\\.\\pipe\\FromSrvPipe")
     EOL = "\r\n\0"
 else:
-    print("Unix-like OS detected.")
-    WRITE_NAME = "/tmp/audacity_script_pipe.to." + str(os.getuid())
-    READ_NAME = "/tmp/audacity_script_pipe.from." + str(os.getuid())
+    # print("Unix-like OS detected.")
+    WRITE_PATH = Path("/tmp/audacity_script_pipe.to." + str(os.getuid()))
+    READ_PATH = Path("/tmp/audacity_script_pipe.from." + str(os.getuid()))
     EOL = "\n"
 
 
@@ -103,7 +103,7 @@ class AudacityInstance:
 
     def writer_handle(self):
         """Opens handle for writing to Audacity."""
-        self.write_handle = open(WRITE_NAME, "w")
+        self.write_handle = open(WRITE_PATH, "w")
 
     def reader_thread(self):
         """Start a thread that reads responses."""
@@ -113,7 +113,7 @@ class AudacityInstance:
     def reader_handle(self):
         """Opens handle for reading from Audacity.
         Reads responses line by line."""
-        read_handle = open(READ_NAME, "r")
+        read_handle = open(READ_PATH, "r")
         message = ""
         handle_alive = True
         while handle_alive:
@@ -171,7 +171,7 @@ def start_audacity():
     print("Waiting 15 seconds for Audacity to start.")
     start = time.time()
     i = 0
-    while not os.path.exists(WRITE_NAME) or not os.path.exists(READ_NAME):
+    while not Path.exists(WRITE_PATH) or not Path.exists(READ_PATH):
         time.sleep(1.0)
         diff = time.time() - start
         i += 1
@@ -197,7 +197,7 @@ def initialize_audacity():
 
 
 def connect():
-    if os.path.exists(WRITE_NAME) and os.path.exists(READ_NAME):
+    if Path.exists(WRITE_PATH) and Path.exists(READ_PATH):
         pass
     else:
         start_audacity()
@@ -218,9 +218,26 @@ def create_lof_string(filepath_list):
 def create_lof_file():
     return open("temp.lof", "w+")
 
+def verify_given_lof(filepath):
+    with open(filepath, "r") as given_lof:
+        content = given_lof.readlines()
+    content = [x.strip() for x in content]
+    is_empty = lambda s : s == ''
+    filter(is_empty, content)
+    if len(content) < 2:
+        return False
+    content = [line.lstrip('file "') for line in content]
+    content = [line.rstrip('"') for line in content]
+    for line in content:
+        path = Path(line)
+        if not path.exists():
+            return False
+    return True
+
+
 
 def remove_lof_file(path):
-    os.remove(path)
+    Path.unlink(path)
 
 
 def to_start():
@@ -404,21 +421,28 @@ def main():
     lof_specified = False
     if len(files) > 1:
         for f in files:
-            file = WindowsPath(f)
+            file = Path(f)
             abs_path = file.resolve(strict=True)
             paths.append(abs_path)
             print(abs_path)
         lof_string = create_lof_string(paths)
         with create_lof_file() as lof_file:
-            lof_filepath = WindowsPath(lof_file.name).resolve(strict=True)
+            lof_filepath = Path(lof_file.name).resolve(strict=True)
             lof_file.write(lof_string)
     elif files[0].endswith(".lof"):
         lof_specified = True
         # ? What freaking exceptions will this throw???
-        given_lof = WindowsPath(files[0])
+        given_lof = Path(files[0])
         lof_filepath = given_lof.resolve(strict=True)
+        valid = verify_given_lof(lof_filepath)
+        if not valid:
+            parser.error("Your .lof file had invalid files, or too few of them.")
     else:
-        raise argparse.ArgumentError
+        parser.error("Not enough valid arguments. Either pass in a .lof file with two or greater files in it, or pass in two or more files by the command line.")
+        # ? This line is not necessary, as you can tell, because parser.error() exits the thread.
+        # ? However, pylance gives me an error if I don't use this (or sys.exit())!  
+        # ? Perhaps pareser.error() doesn't properly mark itself as terminating program execution.
+        lof_filepath = None
 
     # ! Don't forget to close the file handle, then delete it. Also, delete file.name.
 

@@ -218,11 +218,12 @@ def create_lof_string(filepath_list):
 def create_lof_file():
     return open("temp.lof", "w+")
 
+
 def verify_given_lof(filepath):
     with open(filepath, "r") as given_lof:
         content = given_lof.readlines()
     content = [x.strip() for x in content]
-    is_empty = lambda s : s == ''
+    is_empty = lambda s: s == ""
     filter(is_empty, content)
     if len(content) < 2:
         return False
@@ -233,7 +234,6 @@ def verify_given_lof(filepath):
         if not path.exists():
             return False
     return True
-
 
 
 def remove_lof_file(path):
@@ -341,11 +341,11 @@ def valid_silence(choice):
             try:
                 count = int(lst[1])
                 return (lst[0].value, count)
+                # TODO* Of course, the next step is to somehow enable varied silence adding for each track... oh boy.
             except ValueError:
-                print(
+                raise ValueError(
                     "Please give a decimal integer for the number of seconds of silence you want to add!"
                 )
-                # TODO* Of course, the next step is to somehow enable varied silence adding for each track... oh boy.
         else:
             raise argparse.ArgumentTypeError(
                 "The first argument to --silence must be one of the options specified.  See --help for details."
@@ -386,13 +386,19 @@ def main():
         type=valid_silence,
         help="Choose either to add no silence, to add silence to all tracks individually, or to add silence to the combined final track.",
     )
-    # TODO: Validate this as a path to go before a basename. Can do so in main, given output filename as tail and
-    # argument as head; put together and check if valid abspath.
+    # TODO: Validate this as a path to go before a basename. Can do so in main, given output filename as tail and argument as head; put together and check if valid abspath.
     parser.add_argument(
         "-p",
         "--path",
         help="Specify a path for your file either here or in output.",
         type=str,
+    )
+    parser.add_argument(
+        "-c",
+        "--classical",
+        default=False,
+        action="store_true",
+        help="If the arguments are movements of a classical piece, you can choose to sort the input.",
     )
     # ! ArgParse doesn't allow for mutually inclusive arguments.
     # ! Python's stdlib is so crap lol.  Even Rust's clap can do this,
@@ -403,13 +409,13 @@ def main():
     # two types in the enum.  Then I could require a number of secs to add.
     # TODO: Add conditional arguments, to work with silence and adding a silence secs count.
 
-    # TODO: Add ability to import .lof.
     args = parser.parse_args()
     files = args.FILES
     output_name = args.output
     do_truncate = args.truncate
     some_silence = args.silence
     path_specified = args.path
+    sort_specified = args.classical
     # TODO: Reorganize main, and then pass args object to them. Or, pass just needed args.
     # Parts: import, export, increment, combined, etc.
     # * Here's the plan for implementing incremental read.  You have to write a .lof with over 15 tracks, or have to pass the option "--incremental".
@@ -419,7 +425,11 @@ def main():
     # the possibility of two file extensions on a file.
     paths = []
     lof_specified = False
+    # If the user specified two or more files, they are valid audio files.  Put them in paths.
     if len(files) > 1:
+        # If the user specified -c, we sort the file inputs.
+        if sort_specified:
+            files = sort(files)
         for f in files:
             file = Path(f)
             abs_path = file.resolve(strict=True)
@@ -429,6 +439,7 @@ def main():
         with create_lof_file() as lof_file:
             lof_filepath = Path(lof_file.name).resolve(strict=True)
             lof_file.write(lof_string)
+    # If the user specified one file, it could be a .lof file.  Check.
     elif files[0].endswith(".lof"):
         lof_specified = True
         # ? What freaking exceptions will this throw???
@@ -437,11 +448,14 @@ def main():
         valid = verify_given_lof(lof_filepath)
         if not valid:
             parser.error("Your .lof file had invalid files, or too few of them.")
+    # The user submitted either invalid arguments or too few audio files.
     else:
-        parser.error("Not enough valid arguments. Either pass in a .lof file with two or greater files in it, or pass in two or more files by the command line.")
+        parser.error(
+            "Not enough valid arguments. Either pass in a .lof file with two or greater files in it, or pass in two or more files by the command line."
+        )
         # ? This line is not necessary, as you can tell, because parser.error() exits the thread.
-        # ? However, pylance gives me an error if I don't use this (or sys.exit())!  
-        # ? Perhaps pareser.error() doesn't properly mark itself as terminating program execution.
+        # ? However, pylance gives me an error if I don't use this (or sys.exit())!
+        # ? Perhaps parser.error() doesn't properly mark itself as terminating program execution.
         lof_filepath = None
 
     # ! Don't forget to close the file handle, then delete it. Also, delete file.name.
@@ -490,7 +504,7 @@ def main():
     mix_render_all()
     normalize_all()
 
-    # ! Why does generating any nosie not allow you to specify a duration?
+    # ! Why does generating any noise not allow you to specify a duration?
     # ! Why does generating noise generate over the whole file?
     # * These questions are answered on the forums.  In short,
     # * there is no actual macro for inserting silence.

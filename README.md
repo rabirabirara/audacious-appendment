@@ -30,12 +30,12 @@ great.  If Python could have a better argparse module, that would be excellent.
 
 
 ## Nyquist Commands
-The Nyquist-LiSP commands were a pain to write.  The documentation is austere; the community is nonexistent (obviously); none of the symbol names make ANY intuitive sense (classic functional programming style).
+The Nyquist-LiSP commands were a pain to write.  The documentation is austere; the community is absent; the symbol names are unintuitive and obtuse.
 
-And of course, s-expressions are just ugly, if you haven't written LiSP or read the oh so revered book on the structure and interpretation...  But hey, s-expr parsers are so easy to write, aren't they?
+And of course, s-expressions are tangly, if you haven't written LiSP or read the revered book on the structure and interpretation...  (But hey, s-expr parsers are so easy to write, aren't they?)
 
 The capabilities of Audacity's scripting API is itself still somewhat immature, but luckily it turned out to have everything I needed to write what I wanted.  There were a lot of times
-I had thought I was stuck - for example, I relied on the Generate: Silence effect in the GUI, but it was not available in the scripting API.  I eventually decided to just make noise with an amplitude of 0. But while this would work in the GUI, I found out I couldn't specify a _duration_ from the script! - and so my quest to study elementary Nyquist at 3:30 AM kicked off.  And even when I found something that worked when I entered it into the Nyquist prompt in the GUI, it didn't work in the script!  Turns out it wouldn't work for multiline strings; so I took advantage of s-expr's lack of needed whitespace and put it all in a one-line string.
+I had thought I was stuck - for example, I relied on the Generate: Silence effect in the GUI, but it was not available in the scripting API.  I eventually decided to just make noise with an amplitude of 0. But while this would work in the GUI, I found out I couldn't specify a _duration_ from the script! - and so a brief quest to study elementary Nyquist at 3:30 AM kicked off.  And even when I found something that worked when I entered it into the Nyquist prompt in the GUI, it didn't work in the script!  Turns out it wouldn't work for multiline strings; so I took advantage of s-expr's lack of needed whitespace and put it all in a one-line string.
 
 ```Lisp
 ; Example of a Nyquist comamnd that inserts silence at the beginning of a selection.
@@ -49,7 +49,7 @@ Audacity defines multichan-expand for use with stereo channels, since Nyquist ca
 
 Actually, to make this add silence to the end of a selection instead, it's as easy as changing the (at 1) to (at 0).
 
-Overall, you can imagine this command to say something like: define a function "insertstart" that takes a signal (a sound) and gives the sum of some silence and the signal but shifted over by its duration.  Then call the function on both channels.  Gosh, Lisp is cool and ugly at the same time.  I much prefer ML; but I respect LiSP all the same.
+Overall, you can imagine this command to say something like: define a function "insertstart" that takes a signal (a sound) and gives the sum of some silence and the signal but shifted over by its duration.  Then call the function on both channels.  Gosh, Lisp is cool and ugly at the same time.  I love ML; but I respect LiSP all the same.
 
 Hopefully, if anyone ever has the problem of inserting silence at the beginning and end of a file, they can look at my script and figure it out themselves.
 

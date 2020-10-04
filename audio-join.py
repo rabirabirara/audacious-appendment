@@ -13,6 +13,8 @@ Sorting of names works with numbers, so Python can sort the filenames passed
 into it; no need for work.  Typing in the filenames is the harder part.
 """
 
+# TODO: Split this script into multiple files.
+
 # Open Audacity with Python.D:\Program Files (x86)\Audacity
 # Open only if an instance isn't already running.  Do you need to put a delay to
 # have the script wait for it to run? Have the script try a few times while
@@ -211,7 +213,7 @@ def connect():
 def create_lof_string(filepath_list):
     contents = []
     for path in filepath_list:
-        contents.append('file "' + path + '"')
+        contents.append('file "' + str(path) + '"')
     return "\n".join(contents)
 
 
@@ -280,7 +282,7 @@ def end_silence():
 
 
 def import2(filename):
-    return f"Import2: Filename={filename}"
+    return f'Import2: Filename="{filename}"'
 
 
 def select_all():
@@ -318,13 +320,15 @@ def join():
 # ! for options like bitrate, quality, etc.
 # ! Make sure these are correctly set manually.
 def export2(filename):
-    return f"Export2: Filename={filename} NumChannels=2"
+    if not filename.endswith(".mp3"):
+        print("Adding .mp3 extension to your output.")
+        filename += ".mp3"
+    return f'Export2: Filename="{filename}" NumChannels=2'
 
 
-class Silence(Enum):
-    none = "none"
-    independent = "ind"
-    combined = "comb"
+class Effect(Enum):
+    independent = "i"
+    combined = "c"
 
     def __str__(self):
         return self.value
@@ -332,12 +336,12 @@ class Silence(Enum):
 
 # TODO: Do valid checking on Silence + int (secs to add).
 def valid_silence(choice):
-    # A valid choice should be Silence int.
+    # A valid choice should be EFfect int.
     lst = choice.split()
     if lst.len() != 2:
         raise argparse.ArgumentTypeError("Must pass in two arguments to --silence!")
     else:
-        if isinstance(lst[0], Silence):
+        if isinstance(lst[0], Effect):
             try:
                 count = int(lst[1])
                 return (lst[0].value, count)
@@ -350,6 +354,16 @@ def valid_silence(choice):
             raise argparse.ArgumentTypeError(
                 "The first argument to --silence must be one of the options specified.  See --help for details."
             )
+
+
+def valid_amplify(choice):
+    # A valid amplify should be Effect
+    if isinstance(choice, Effect):
+        return choice
+    else:
+        raise argparse.ArgumentTypeError(
+            "The argument to amplify must be one of the options specified.  See --help for details."
+        )
 
 
 def valid_filename(filename):
@@ -372,9 +386,15 @@ def main():
         type=valid_filename,
     )
     parser.add_argument(
+        "-a",
+        "--amplify",
+        type=valid_amplify,
+        action="store",
+        help="Amplifies the resulting file to have a peak of 0.0 db.",
+    )
+    parser.add_argument(
         "-t",
         "--truncate",
-        default=False,
         action="store_true",
         help="Choose to truncate silence or not.  Truncating is useful for joining classical movements that segue attaca into one another.",
     )
@@ -383,7 +403,9 @@ def main():
     parser.add_argument(
         "-s",
         "--silence",
+        # A valid Silence has 2 arguments - one from the enum ind|comb, one for the number of secs.
         type=valid_silence,
+        action="store",
         help="Choose either to add no silence, to add silence to all tracks individually, or to add silence to the combined final track.",
     )
     # TODO: Validate this as a path to go before a basename. Can do so in main, given output filename as tail and argument as head; put together and check if valid abspath.
@@ -396,7 +418,6 @@ def main():
     parser.add_argument(
         "-c",
         "--classical",
-        default=False,
         action="store_true",
         help="If the arguments are movements of a classical piece, you can choose to sort the input.",
     )
@@ -408,10 +429,13 @@ def main():
     # more like an Option, and have default = None or specified = one of the
     # two types in the enum.  Then I could require a number of secs to add.
     # TODO: Add conditional arguments, to work with silence and adding a silence secs count.
+    # TODO: Add "individually" option, which will apply an effect to each track individually.  May require sequential file opening.  Useful for amplifying some movements differently from others.
+    # Use groups?
 
     args = parser.parse_args()
     files = args.FILES
     output_name = args.output
+    amplify_type = args.amplify
     do_truncate = args.truncate
     some_silence = args.silence
     path_specified = args.path
@@ -429,7 +453,7 @@ def main():
     if len(files) > 1:
         # If the user specified -c, we sort the file inputs.
         if sort_specified:
-            files = sort(files)
+            files = sorted(files)
         for f in files:
             file = Path(f)
             abs_path = file.resolve(strict=True)
@@ -502,7 +526,8 @@ def main():
     #     silence_independently()
     align_all()
     mix_render_all()
-    normalize_all()
+    if amplify_type == "comb":
+        normalize_all()
 
     # ! Why does generating any noise not allow you to specify a duration?
     # ! Why does generating noise generate over the whole file?
@@ -527,7 +552,7 @@ def main():
         print(f"Saving to default path: {output}")
 
     # ! The resulting quality of the output file is lower than the originals.  Egads!
-    # TODO: Investigate the cause of lower quality output.
+    # ! TODO: Investigate the cause of lower quality output.
     do(export2(output))
 
     if not lof_specified:

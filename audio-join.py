@@ -2,11 +2,14 @@
 
 import errno
 import os, sys
-from pathlib import Path
+from pathlib import Path, PurePath
 import argparse
 import time
 import threading
 from enum import Enum
+
+# Project files:
+import envoptions
 
 """
 Sorting of names works with numbers, so Python can sort the filenames passed
@@ -35,6 +38,7 @@ into it; no need for work.  Typing in the filenames is the harder part.
 # Actually... -59 still cuts out the same silences in the cadenza, for some
 # reason... this sucks.  -59 is the way to go to get a smooth experience.
 # Whatever; sorry flamboyant musicians who like putting silences.
+# * No, this should be a none problem once incremental appendment is implemented.  Each track should have their silence cut on the ends individually
 # Truncate these tracks independently.  Truncate to 0.
 
 # Select: all.
@@ -63,30 +67,18 @@ into it; no need for work.  Typing in the filenames is the harder part.
 # Options: -o for output, -s for sort filenames if possible
 # Make a cleaning script afterwards, to delete .lof files
 
-
-# For my use.
-MUSICFOLDER = "D:\\Wyvern\\Music\\"
-
-if sys.platform == "win32":
-    # print("Windows OS detected.")
-    WRITE_PATH = Path("\\\\.\\pipe\\ToSrvPipe")
-    READ_PATH = Path("\\\\.\\pipe\\FromSrvPipe")
-    EOL = "\r\n\0"
-else:
-    # print("Unix-like OS detected.")
-    WRITE_PATH = Path("/tmp/audacity_script_pipe.to." + str(os.getuid()))
-    READ_PATH = Path("/tmp/audacity_script_pipe.from." + str(os.getuid()))
-    EOL = "\n"
-
-
+# This code is from the Audacity wiki's "pipeclient.py".
 class AudacityInstance:
 
     reader_pipe_broken = threading.Event()
     reply_ready = threading.Event()
 
-    def __init__(self):
+    def __init__(self, config):
         self.write_handle = None
         self.reply = ""
+        self.write_path = config.write_path
+        self.read_path = config.read_path
+        self.eol = config.eol
         # For good measure.  Not sure why this code is here, though - there's only one instance anyway.
         if not self.write_handle:
             self.writer_thread()
@@ -105,7 +97,7 @@ class AudacityInstance:
 
     def writer_handle(self):
         """Opens handle for writing to Audacity."""
-        self.write_handle = open(WRITE_PATH, "w")
+        self.write_handle = open(self.write_path, "w")
 
     def reader_thread(self):
         """Start a thread that reads responses."""
@@ -115,7 +107,7 @@ class AudacityInstance:
     def reader_handle(self):
         """Opens handle for reading from Audacity.
         Reads responses line by line."""
-        read_handle = open(READ_PATH, "r")
+        read_handle = open(self.read_path, "r")
         message = ""
         handle_alive = True
         while handle_alive:
@@ -135,7 +127,7 @@ class AudacityInstance:
     def write(self, command):
         """Send a single command to Audacity."""
         print("Sending command:", command)
-        self.write_handle.write(command + EOL)
+        self.write_handle.write(command + self.eol)
         # Check that the read handle is still alive.
         if AudacityInstance.reader_pipe_broken.isSet():
             sys.exit("The handle for reading Audacity's responses broke down.")
@@ -168,12 +160,12 @@ class AudacityInstance:
         time.sleep(0.5)
 
 
-def start_audacity():
-    os.startfile("D:/Program Files (x86)/Audacity/audacity.exe")
+def start_audacity(config):
+    os.startfile(config.audacity_loc)
     print("Waiting 15 seconds for Audacity to start.")
     start = time.time()
     i = 0
-    while not Path.exists(WRITE_PATH) or not Path.exists(READ_PATH):
+    while not Path.exists(config.write_path) or not Path.exists(config.read_path):
         time.sleep(1.0)
         diff = time.time() - start
         i += 1
@@ -198,15 +190,15 @@ def initialize_audacity():
     print("Finished waiting.  Begin command execution.")
 
 
-def connect():
-    if Path.exists(WRITE_PATH) and Path.exists(READ_PATH):
+def connect(config):
+    if Path.exists(config.write_path) and Path.exists(config.read_path):
         pass
     else:
-        start_audacity()
+        start_audacity(config.audacity_loc)
 
     print("Successfully located Audacity instance.")
     time.sleep(1.0)
-    instance = AudacityInstance()
+    instance = AudacityInstance(config)
     return instance
 
 
@@ -367,8 +359,7 @@ def valid_amplify(choice):
 
 
 def valid_filename(filename):
-    _, extension = os.path.splitext(filename)
-    if extension == "":
+    if ext := PurePath(filename).suffix == "":
         raise argparse.ArgumentTypeError("File arguments must include an extension!")
     else:
         return filename
@@ -376,11 +367,11 @@ def valid_filename(filename):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("FILES", nargs="+", type=valid_filename)
-    parser.add_argument(
+    regular_or_config = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument("FILES", nargs='*', type=valid_filename)
+    regular_or_config.add_argument(
         "-o",
         "--output",
-        required=True,
         help="Determines the output file's name.",
         metavar="FILENAME.ext",
         type=valid_filename,
@@ -421,9 +412,13 @@ def main():
         action="store_true",
         help="If the arguments are movements of a classical piece, you can choose to sort the input.",
     )
-    # ! ArgParse doesn't allow for mutually inclusive arguments.
-    # ! Python's stdlib is so crap lol.  Even Rust's clap can do this,
-    # ! and it's much newer (when we consider optparse too).
+    regular_or_config.add_argument(
+        "--envoptions",
+        action="store_true",
+        help="Set options such as where to store your music and where your Audacity instance is located."
+    )
+
+
     # This means I can't add a count argument that is required when I
     # have an add silence argument. If I could, I could make the Silence enum
     # more like an Option, and have default = None or specified = one of the
@@ -433,6 +428,14 @@ def main():
     # Use groups?
 
     args = parser.parse_args()
+    
+    if args.envoptions:
+        envoptions.set_options()
+        return
+    
+    if config := envoptions.find_options() is None:
+        sys.exit("Your options have not yet been set.  Run this script with the flag '--envoptions' to configure it.")
+
     files = args.FILES
     output_name = args.output
     amplify_type = args.amplify
@@ -440,6 +443,7 @@ def main():
     some_silence = args.silence
     path_specified = args.path
     sort_specified = args.classical
+
     # TODO: Reorganize main, and then pass args object to them. Or, pass just needed args.
     # Parts: import, export, increment, combined, etc.
     # * Here's the plan for implementing incremental read.  You have to write a .lof with over 15 tracks, or have to pass the option "--incremental".
@@ -484,7 +488,7 @@ def main():
 
     # ! Don't forget to close the file handle, then delete it. Also, delete file.name.
 
-    instance = connect()
+    instance = connect(config)
     initialize_audacity()
 
     # ! Audacity can only handle a maximum of 16 tracks.
@@ -542,13 +546,13 @@ def main():
     do(select_all())
     do(join())
 
-    if os.path.isabs(output_name):
+    if (output_path := PurePath(output_name)).is_absolute():
         output = output_name
         print(f"Saving to path: {output}")
     else:
         # If the path is not valid, do away with it.
-        name_ext = os.path.basename(output_name)
-        output = MUSICFOLDER + name_ext
+        name_ext = output_path.name
+        output = config.default_loc + name_ext
         print(f"Saving to default path: {output}")
 
     # ! The resulting quality of the output file is lower than the originals.  Egads!
@@ -565,7 +569,7 @@ if __name__ == "__main__":
         main()
     except (KeyboardInterrupt, SystemExit):
         exit()
-    except FileNotFoundError:
-        print(
-            "One of your input files was not found! It may have been an erroneous filename, or an improper path."
-        )
+    # except FileNotFoundError:
+    #     print(
+    #         "One of your input files was not found! It may have been an erroneous filename, or an improper path."
+    #     )

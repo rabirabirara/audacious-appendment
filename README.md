@@ -30,7 +30,7 @@ great.  If Python could have a better argparse module, that would be excellent.
 
 
 ## Nyquist Commands
-The Nyquist-LiSP commands were a pain to write.  The documentation is austere; the community is absent; the symbol names are unintuitive and obtuse.
+The Nyquist-LiSP commands were challenging to figure out.  The documentation is austere; the community is absent; the symbol names are unintuitive.
 
 And of course, s-expressions are tangly, if you haven't written LiSP or read the revered book on the structure and interpretation...  (But hey, s-expr parsers are so easy to write, aren't they?)
 
